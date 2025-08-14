@@ -1,0 +1,24 @@
+{
+  "name": "automesh",
+  "version": "1.0.0",
+  "description": "Seamessly connects and automates workflows between your Frappe apps with intelligent AI-powered triggers.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "postinstall": "cd frontend && yarn install",
+    "dev": "cd frontend && yarn dev",
+    "build": "cd frontend && yarn build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jjdnavares/automesh.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/jjdnavares/automesh/issues"
+  },
+  "homepage": "https://github.com/jjdnavares/automesh#readme"
+}
