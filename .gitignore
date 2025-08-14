@@ -56,3 +56,4 @@ jspm_packages/
 
 # automesh
 automesh/public/frontend
+automesh/www/frontend.html
