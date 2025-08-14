@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
+import App from './App'
 import {
   Outlet,
   RouterProvider,
@@ -10,7 +11,21 @@ import {
 } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 
+function sessionUser() {
+  const cookies = new URLSearchParams(document.cookie.split("; ").join("&"))
+  let _sessionUser = cookies.get("user_id")
+  if (_sessionUser === "Guest") {
+    _sessionUser = null
+  }
+  return _sessionUser
+}
+
 const rootRoute = createRootRoute({
+  beforeLoad: async ({ location }) => {
+    if (!sessionUser()) {
+      window.location.href = "/login?reditect-to=" + location.pathname
+    }
+  },
   component: () => (
     <>
       <div className="p-2 flex gap-2">
@@ -34,7 +49,7 @@ const indexRoute = createRoute({
   component: function Index() {
     return (
       <div className="p-2">
-        <h3>Welcome Home!</h3>
+        <App />
       </div>
     )
   },
@@ -44,7 +59,9 @@ const aboutRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/about',
   component: function About() {
-    return <div className="p-2">Hello from About!</div>
+    return sessionUser() ?
+      <div className="p-2">Hello to you, {sessionUser()}</div> :
+      <div className="p-2">You are not logged in!</div>
   },
 })
 
