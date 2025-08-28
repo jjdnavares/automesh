@@ -25,8 +25,8 @@ import {
   AvatarFallback,
   AvatarImage,
 } from "@/components/ui/avatar"
-import { Button } from './components/ui/button'
-
+import { Button } from '@/components/ui/button'
+import { getUserInfo } from '@/data/session'
 
 // Create a client
 const queryClient = new QueryClient()
@@ -51,7 +51,7 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
       <div className="p-2 flex gap-2">
         <Link to="/" className="[&.active]:font-bold">
           Home
-        </Link>{' '}
+        </Link>{" "}
         <Link to="/about" className="[&.active]:font-bold">
           About
         </Link>
@@ -74,21 +74,6 @@ const indexRoute = createRoute({
     )
   },
 })
-
-async function getUserInfo() {
-  const response = await fetch('/api/method/automesh.api.get_current_user_info')
-  if (!response.ok) {
-    throw new Error("Error occured while fetching user info")
-  }
-
-  const data = await response.json()
-
-  if (data.message) {
-    return data.message
-  }
-
-  return data
-}
 
 const aboutRoute = createRoute({
   getParentRoute: () => rootRoute,
