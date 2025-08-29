@@ -1,0 +1,127 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:title",
+ "creation": "2025-08-28 21:38:25.979767",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "description",
+  "version",
+  "is_active",
+  "tags",
+  "created_at",
+  "updated_at",
+  "last_executed_at",
+  "execution_count",
+  "workflow_json",
+  "created_by"
+ ],
+ "fields": [
+  {
+   "description": "Title of the workflow",
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "label": "Title",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Detailed description",
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "in_filter": 1,
+   "label": "Description"
+  },
+  {
+   "default": "1.0.0",
+   "description": "Version number",
+   "fieldname": "version",
+   "fieldtype": "Data",
+   "label": "Version"
+  },
+  {
+   "default": "0",
+   "description": "Whterher workflow is active",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active"
+  },
+  {
+   "description": "Tags for categorization",
+   "fieldname": "tags",
+   "fieldtype": "Small Text",
+   "in_filter": 1,
+   "label": "Tags"
+  },
+  {
+   "description": "Creation timestamp",
+   "fieldname": "created_at",
+   "fieldtype": "Datetime",
+   "label": "Created At"
+  },
+  {
+   "description": "Last update timestamp",
+   "fieldname": "updated_at",
+   "fieldtype": "Datetime",
+   "label": "Updated At"
+  },
+  {
+   "description": "Last execution timestap",
+   "fieldname": "last_executed_at",
+   "fieldtype": "Datetime",
+   "label": "Last Executed At"
+  },
+  {
+   "description": "Number of executions",
+   "fieldname": "execution_count",
+   "fieldtype": "Int",
+   "label": "Execution Count"
+  },
+  {
+   "description": "Complete workflow data including nodes and edges",
+   "fieldname": "workflow_json",
+   "fieldtype": "Code",
+   "label": "Workflow JSON"
+  },
+  {
+   "description": "User who created the workflow",
+   "fieldname": "created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-08-29 03:24:52.475956",
+ "modified_by": "Administrator",
+ "module": "AutoMesh",
+ "name": "Automesh Workflow",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "track_views": 1
+}

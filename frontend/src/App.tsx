@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
-import { ReactFlow, applyNodeChanges, applyEdgeChanges, addEdge } from '@xyflow/react';
+import { ReactFlow, applyNodeChanges, applyEdgeChanges, addEdge, Background, Controls, Panel } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import '@/index.css';
+import './components/workflow/workflow.css';
+import CustomNode from './components/workflow/CustomNode';
 import { Button } from '@/components/ui/button';
 import {
 	AlertDialog,
@@ -27,31 +29,67 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
+// import { Label } from "@/components/ui/label"
+// import { Input } from "@/components/ui/input"
 
 
 const initialNodes = [
-	{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'Content Generator' } },
-	{ id: 'n2', position: { x: 0, y: 100 }, data: { label: 'Post Blog' } },
-	{ id: 'n3', position: { x: 0, y: 200 }, data: { label: 'Email Notification to Subscribers' } },
+	{ 
+		id: 'n1', 
+		type: 'custom',
+		position: { x: 250, y: 100 }, 
+		data: { 
+			label: 'Generate Product Description', 
+			type: 'SEO Writer',
+			icon: '📝',
+			color: '#00C853'
+		} 
+	},
+	{ 
+		id: 'n2', 
+		type: 'custom',
+		position: { x: 250, y: 250 }, 
+		data: { 
+			label: 'Post to Product Page', 
+			type: 'Web Page Content',
+			icon: '🌐',
+			color: '#2979FF'
+		} 
+	},
+	{ 
+		id: 'n3', 
+		type: 'custom',
+		position: { x: 250, y: 400 }, 
+		data: { 
+			label: 'Send to Premium Subscribers', 
+			type: 'Email Blast',
+			icon: '📧',
+			color: '#FF6D00'
+		} 
+	},
 ];
-const initialEdges = [{ id: 'n1-n2', source: 'n1', target: 'n2' }, { id: 'n2-n3', source: 'n2', target: 'n3' }];
+const initialEdges = [
+	{ id: 'n1-n2', source: 'n1', target: 'n2', animated: true },
+	{ id: 'n2-n3', source: 'n2', target: 'n3', animated: true }
+];
+
+// Define custom node types
+const nodeTypes = { custom: CustomNode };
 
 export default function App() {
 	const [nodes, setNodes] = useState(initialNodes);
 	const [edges, setEdges] = useState(initialEdges);
 
 	const onNodesChange = useCallback(
-		(changes) => setNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot)),
+		(changes: any) => setNodes((nodesSnapshot) => applyNodeChanges(changes, nodesSnapshot)),
 		[],
 	);
 	const onEdgesChange = useCallback(
-		(changes) => setEdges((edgesSnapshot) => applyEdgeChanges(changes, edgesSnapshot)),
+		(changes: any) => setEdges((edgesSnapshot) => applyEdgeChanges(changes, edgesSnapshot)),
 		[],
 	);
 	const onConnect = useCallback(
-		(params) => setEdges((edgesSnapshot) => addEdge(params, edgesSnapshot)),
+		(params: any) => setEdges((edgesSnapshot) => addEdge(params, edgesSnapshot)),
 		[],
 	);
 
@@ -163,7 +201,7 @@ export default function App() {
 				<Badge variant="purple">help wanted</Badge>
 				<Badge variant="rose">bug</Badge>
 			</div>
-			<div style={{ width: '100vw', height: '100vh' }}>
+			<div className="workflow-container">
 				<ReactFlow
 					nodes={nodes}
 					edges={edges}
@@ -171,7 +209,34 @@ export default function App() {
 					onEdgesChange={onEdgesChange}
 					onConnect={onConnect}
 					fitView
-				/>
+					fitViewOptions={{ padding: 0.2, includeHiddenNodes: true }}
+					defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+					nodeTypes={nodeTypes}
+				>
+					<Background gap={20} size={1} />
+					<Controls />
+					<Panel position="top-left">
+						<div className="p-2 rounded bg-white shadow-md">
+							<h3 className="text-lg font-semibold mb-2">Content Marketing Pipeline</h3>
+							<div className="flex flex-wrap gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => toast("Node functionality coming soon!")}
+								>
+									Add Node
+								</Button>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => toast("Saved workflow!")}
+								>
+									Save Workflow
+								</Button>
+							</div>
+						</div>
+					</Panel>
+				</ReactFlow>
 			</div>
 		</>
 	);

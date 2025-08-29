@@ -1,0 +1,150 @@
+{
+ "actions": [],
+ "autoname": "field:type",
+ "creation": "2025-08-29 02:32:42.922349",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "type",
+  "label",
+  "description",
+  "icon",
+  "color",
+  "category",
+  "inputs",
+  "outputs",
+  "is_system",
+  "is_enabled",
+  "handler_module",
+  "handler_function",
+  "schema_json",
+  "created_by"
+ ],
+ "fields": [
+  {
+   "description": "Unique node type identifier",
+   "fieldname": "type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Type",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Human-readable label",
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "label": "Label",
+   "reqd": 1
+  },
+  {
+   "description": "Detailed description",
+   "fieldname": "description",
+   "fieldtype": "Text",
+   "in_filter": 1,
+   "label": "Description"
+  },
+  {
+   "description": "Icon for UI represnetation",
+   "fieldname": "icon",
+   "fieldtype": "Data",
+   "label": "Icon"
+  },
+  {
+   "description": "Color code for UI",
+   "fieldname": "color",
+   "fieldtype": "Data",
+   "label": "Color"
+  },
+  {
+   "description": "Node category",
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_filter": 1,
+   "label": "Category",
+   "options": "automation\ncontent\ncommunication\nintegration"
+  },
+  {
+   "description": "Input specifications in JSON format",
+   "fieldname": "inputs",
+   "fieldtype": "Small Text",
+   "label": "Inputs"
+  },
+  {
+   "description": "Output specifications in JSON format",
+   "fieldname": "outputs",
+   "fieldtype": "Small Text",
+   "label": "Outputs"
+  },
+  {
+   "default": "1",
+   "description": "Whether it's a system node type",
+   "fieldname": "is_system",
+   "fieldtype": "Check",
+   "label": "Is System"
+  },
+  {
+   "default": "1",
+   "description": "Whether the node type is enabled",
+   "fieldname": "is_enabled",
+   "fieldtype": "Check",
+   "label": "Is Enabled"
+  },
+  {
+   "description": "Python module path for the handler",
+   "fieldname": "handler_module",
+   "fieldtype": "Data",
+   "label": "Handler Module"
+  },
+  {
+   "description": "Python function name for handler",
+   "fieldname": "handler_function",
+   "fieldtype": "Data",
+   "label": "Handler Function"
+  },
+  {
+   "description": "JSON schema for node parameters",
+   "fieldname": "schema_json",
+   "fieldtype": "Code",
+   "label": "Schema JSON"
+  },
+  {
+   "description": "\tUser who created the node type",
+   "fieldname": "created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-08-29 03:24:07.905159",
+ "modified_by": "Administrator",
+ "module": "AutoMesh",
+ "name": "Automesh Node Type",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "track_views": 1
+}

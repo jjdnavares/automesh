@@ -1,0 +1,112 @@
+{
+ "actions": [],
+ "autoname": "format:AMNE-{workflow_execution}-{node_id}",
+ "creation": "2025-08-29 03:26:40.358229",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "workflow_execution",
+  "node_id",
+  "node_type",
+  "status",
+  "start_time",
+  "end_time",
+  "input_data",
+  "output_data",
+  "error_message",
+  "created_by"
+ ],
+ "fields": [
+  {
+   "description": "Reference to the parent execution",
+   "fieldname": "workflow_execution",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "label": "Workflow Execution",
+   "options": "Automesh Execution",
+   "reqd": 1
+  },
+  {
+   "description": "Unique node identifier in the workflow",
+   "fieldname": "node_id",
+   "fieldtype": "Data",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "label": "Node ID",
+   "reqd": 1
+  },
+  {
+   "description": "Type of node being executed",
+   "fieldname": "node_type",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "label": "Node Type",
+   "options": "Automesh Node Type",
+   "reqd": 1
+  },
+  {
+   "description": "Current node execution status",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_filter": 1,
+   "label": "Status",
+   "options": "pending\nqueued\nrunning\ncompleted\nerror"
+  },
+  {
+   "description": "When node execution started",
+   "fieldname": "start_time",
+   "fieldtype": "Datetime",
+   "label": "Start Time"
+  },
+  {
+   "description": "When node execution completed",
+   "fieldname": "end_time",
+   "fieldtype": "Datetime",
+   "label": "End Time"
+  },
+  {
+   "description": "Input data for the node",
+   "fieldname": "input_data",
+   "fieldtype": "Code",
+   "label": "Input Data"
+  },
+  {
+   "description": "Output data from the node",
+   "fieldname": "output_data",
+   "fieldtype": "Code",
+   "label": "Output Data"
+  },
+  {
+   "description": "Error details if node execution failed",
+   "fieldname": "error_message",
+   "fieldtype": "Long Text",
+   "label": "Error Message"
+  },
+  {
+   "description": "User who initiated the node execution",
+   "fieldname": "created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-08-29 03:35:17.080866",
+ "modified_by": "Administrator",
+ "module": "AutoMesh",
+ "name": "Automesh Node Execution",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "track_views": 1
+}

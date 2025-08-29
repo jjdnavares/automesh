@@ -55,5 +55,6 @@ jspm_packages/
 .aider*
 
 # automesh
-automesh/public/frontend
+automesh/public/frontend/
 automesh/www/frontend.html
+# docs/

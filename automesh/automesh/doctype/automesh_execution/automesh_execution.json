@@ -1,0 +1,111 @@
+{
+ "actions": [],
+ "autoname": "format:AMWF-{workflow}-{#####}",
+ "creation": "2025-08-29 03:06:04.867699",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "workflow",
+  "status",
+  "start_time",
+  "end_time",
+  "input_data",
+  "output_data",
+  "execution_data",
+  "error_message",
+  "created_by"
+ ],
+ "fields": [
+  {
+   "description": "Reference to the workflow being executed",
+   "fieldname": "workflow",
+   "fieldtype": "Link",
+   "in_filter": 1,
+   "in_list_view": 1,
+   "label": "Workflow",
+   "options": "Automesh Workflow",
+   "reqd": 1
+  },
+  {
+   "default": "draft",
+   "description": "Current execution status",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_filter": 1,
+   "label": "Status",
+   "options": "draft\nqueued\nrunning\ncompleted\nfailed\npaused\ncancelled"
+  },
+  {
+   "description": "When execution started",
+   "fieldname": "start_time",
+   "fieldtype": "Datetime",
+   "label": "Start Time"
+  },
+  {
+   "description": "When execution completed",
+   "fieldname": "end_time",
+   "fieldtype": "Datetime",
+   "label": "End Time"
+  },
+  {
+   "description": "Input data for the workflow",
+   "fieldname": "input_data",
+   "fieldtype": "Code",
+   "label": "Input Data"
+  },
+  {
+   "description": "Final output from the workflow",
+   "fieldname": "output_data",
+   "fieldtype": "Code",
+   "label": "Output Data"
+  },
+  {
+   "description": "Stores intermediate execution data",
+   "fieldname": "execution_data",
+   "fieldtype": "Code",
+   "label": "Execution Data"
+  },
+  {
+   "description": "Error details if execution failed",
+   "fieldname": "error_message",
+   "fieldtype": "Long Text",
+   "label": "Error Message"
+  },
+  {
+   "description": "User who initiated the execution",
+   "fieldname": "created_by",
+   "fieldtype": "Link",
+   "label": "Created By",
+   "options": "User"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-08-29 03:26:05.117104",
+ "modified_by": "Administrator",
+ "module": "AutoMesh",
+ "name": "Automesh Execution",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1,
+ "track_views": 1
+}

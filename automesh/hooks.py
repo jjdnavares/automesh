@@ -86,7 +86,7 @@ app_license = "agpl-3.0"
 # ------------
 
 # before_install = "automesh.install.before_install"
-# after_install = "automesh.install.after_install"
+after_install = "automesh.automesh.setup.permissions.setup"
 
 # Uninstallation
 # ------------
