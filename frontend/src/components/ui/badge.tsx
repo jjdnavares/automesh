@@ -12,7 +12,7 @@ const badgeVariants = cva(
         default:
           "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
         secondary:
-          "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
+          "border-transparent bg-gray-100 text-gray-700 font-semibold [a&]:hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300",
         destructive:
           "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
@@ -29,6 +29,8 @@ const badgeVariants = cva(
           'bg-lime-400/20 text-lime-700 group-data-[hover]:bg-lime-400/30 dark:bg-lime-400/10 dark:text-lime-300 dark:group-data-[hover]:bg-lime-400/15',
         green:
           'bg-green-500/15 text-green-700 group-data-[hover]:bg-green-500/25 dark:bg-green-500/10 dark:text-green-400 dark:group-data-[hover]:bg-green-500/20',
+        success:
+          'bg-green-500/15 text-green-700 border-green-500/20 font-semibold dark:bg-green-500/20 dark:text-green-400 dark:border-green-500/30',
         emerald:
           'bg-emerald-500/15 text-emerald-700 group-data-[hover]:bg-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-400 dark:group-data-[hover]:bg-emerald-500/20',
         teal: 

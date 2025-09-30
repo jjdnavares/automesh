@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { 
   ReactFlowProvider,
   ConnectionMode,
@@ -9,6 +9,7 @@ import {
   addEdge,
   BackgroundVariant
 } from '@xyflow/react';
+import { LucideLayoutPanelLeft, LucideX, LucidePlay } from 'lucide-react';
 import type { Connection, WorkflowEdge } from '../../../types/workflow';
 
 import Canvas from './Canvas';
@@ -17,6 +18,7 @@ import BaseNode from '../nodes/BaseNode';
 import CustomEdge from '../edges/CustomEdge';
 import NodeLibrary from '../nodes/NodeLibrary';
 import PropertiesPanel from '../panels/PropertiesPanel';
+import SelectNodePanel from '../panels/SelectNodePanel';
 
 // Import state management when implemented
 // import { useWorkflowStore } from '../../../store/workflow/workflowStore';
@@ -49,6 +51,10 @@ function WorkflowCanvasInner({
   initialNodes = [],
   initialEdges = [],
 }: WorkflowCanvasProps) {
+  // Track if node panel is visible
+  const [isPanelVisible, setIsPanelVisible] = useState(showLibrary);
+  // Track if a node is selected
+  const [selectedNode, setSelectedNode] = useState<any>(null);
   // When we implement the store, we'll use it here
   // const { nodes: storeNodes, edges: storeEdges, onNodesChange, onEdgesChange } = useWorkflowStore();
   
@@ -77,7 +83,8 @@ function WorkflowCanvasInner({
   );
   
   const onNodeClick = useCallback((_: any, node: any) => {
-    // Will be used to show properties panel
+    // Set the selected node for properties panel
+    setSelectedNode(node);
     console.log('Node clicked:', node);
   }, []);
   
@@ -135,23 +142,79 @@ function WorkflowCanvasInner({
         defaultMarkerColor="#6366F1"
         backgroundVariant={BackgroundVariant.Dots}
       >
-        <Panel position="top-left" className="workflow-header-panel">
-          <h3 className="text-xl font-bold">
-            {workflowId ? `Workflow: ${workflowId}` : 'New Workflow'}
-          </h3>
+        {/* Workflow title */}
+        <Panel position="top-left" className="workflow-header-panel m-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold">
+              {workflowId ? `Workflow: ${workflowId}` : 'New Workflow'}
+            </h3>
+          </div>
         </Panel>
         
-        {showLibrary && (
-          <Panel position="top-right" className="node-library-panel">
+        {/* Action buttons */}
+        <Panel position="top-right" className="workflow-actions-panel m-4">
+          <div className="flex items-center gap-2">
+            <button className="px-3 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-medium">
+              Run Workflow
+            </button>
+            <button className="px-3 py-1 bg-white border border-gray-300 text-gray-700 rounded hover:bg-gray-50 text-sm font-medium">
+              Save
+            </button>
+          </div>
+        </Panel>
+        
+        {/* Toggle node panel button */}
+        <Panel position="top-right" className="toggle-panel-btn mr-2" style={{ top: '80px' }}>
+          <button 
+            className="px-3 py-1.5 bg-white border border-gray-200 text-gray-800 rounded-md hover:bg-gray-50 text-sm font-medium flex items-center gap-1.5 shadow-sm"
+            onClick={() => setIsPanelVisible(!isPanelVisible)}
+            title={isPanelVisible ? "Close nodes panel" : "Open nodes panel"}
+          >
+            {isPanelVisible ? (
+              <>
+                <LucideX size={16} className="text-gray-600" />
+                <span className="whitespace-nowrap">Close panel</span>
+              </>
+            ) : (
+              <>
+                <LucideLayoutPanelLeft size={16} className="text-gray-600" />
+                <span className="whitespace-nowrap">Open nodes panel</span>
+              </>
+            )}
+          </button>
+        </Panel>
+        
+        {/* Node library in right side panel */}
+        {isPanelVisible && (
+          <Panel position="top-right" className="node-library-panel mr-4" style={{ top: '130px' }}>
             <NodeLibrary />
           </Panel>
         )}
-        
-        {showProperties && (
-          <Panel position="bottom-right" className="properties-panel">
-            <PropertiesPanel />
+
+        {/* Select node panel or Properties panel below node library */}
+        {isPanelVisible && showProperties && (
+          <Panel 
+            position="top-right" 
+            className="select-node-panel mr-4" 
+            style={{ top: 'calc(130px + 400px + 16px)' }}
+          >
+            {selectedNode ? (
+              <PropertiesPanel nodeData={selectedNode} onClose={() => setSelectedNode(null)} />
+            ) : (
+              <SelectNodePanel />
+            )}
           </Panel>
         )}
+
+        {/* Execution button (bottom right) */}
+        <Panel position="bottom-right" className="mr-4 mb-4">
+          <button
+            className="p-3 bg-orange-500 text-white rounded-md hover:bg-orange-600 transition-colors"
+            title="Execute workflow"
+          >
+            <LucidePlay size={20} fill="white" />
+          </button>
+        </Panel>
       </Canvas>
     </div>
   );

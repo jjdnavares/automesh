@@ -21,12 +21,17 @@ interface FlowNode {
   [key: string]: any;
 }
 
-export default function PropertiesPanel() {
+interface PropertiesPanelProps {
+  nodeData?: any;
+  onClose?: () => void;
+}
+
+export default function PropertiesPanel({ nodeData, onClose }: PropertiesPanelProps) {
   const { getNodes, setNodes } = useReactFlow();
   const [isExpanded, setIsExpanded] = useState(true);
   
   // Get all selected nodes
-  const selectedNodes = getNodes().filter((node) => node.selected) as FlowNode[];
+  const selectedNodes = nodeData ? [nodeData] : getNodes().filter((node) => node.selected) as FlowNode[];
   const hasSelectedNode = selectedNodes.length > 0;
   
   // Get the first selected node (for now we'll just show properties for one node)
@@ -90,16 +95,34 @@ export default function PropertiesPanel() {
         isExpanded ? "w-[280px]" : "w-[40px]"
       )}
     >
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200">
-        <h3 className={cn("font-medium text-gray-900", !isExpanded && "hidden")}>
-          {hasSelectedNode ? 'Properties' : 'Select a node'}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50">
+        <h3 className={cn("font-medium text-gray-900 flex items-center", !isExpanded && "hidden")}>
+          {hasSelectedNode && (
+            <span className="mr-2 w-5 h-5 flex items-center justify-center text-white rounded-md"
+                  style={{ backgroundColor: selectedNode?.data.color || '#6366F1' }}>
+              {selectedNode?.data.icon || '⚙️'}
+            </span>
+          )}
+          {hasSelectedNode ? (selectedNode?.data.label || 'Node Properties') : 'Select a node'}
         </h3>
-        <button 
-          onClick={togglePanel}
-          className="p-1 rounded-md hover:bg-gray-100 text-gray-500"
-        >
-          {isExpanded ? '◀' : '▶'}
-        </button>
+        <div className="flex gap-1">
+          {onClose && (
+            <button 
+              onClick={onClose}
+              className="p-1 rounded-md hover:bg-gray-100 text-gray-500"
+              aria-label="Close panel"
+            >
+              ✕
+            </button>
+          )}
+          <button 
+            onClick={togglePanel}
+            className="p-1 rounded-md hover:bg-gray-100 text-gray-500"
+            aria-label={isExpanded ? 'Collapse panel' : 'Expand panel'}
+          >
+            {isExpanded ? '◀' : '▶'}
+          </button>
+        </div>
       </div>
       
       {isExpanded && (
@@ -117,14 +140,15 @@ export default function PropertiesPanel() {
                 </div>
                 
                 <div className="mb-3">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Label
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Node Name
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-gray-50 hover:bg-white focus:bg-white transition-colors"
                     value={selectedNode.data.label || ''}
                     onChange={(e) => updateNodeLabel(selectedNode.id, e.target.value)}
+                    placeholder="Enter node name"
                   />
                 </div>
               </div>
@@ -141,12 +165,13 @@ export default function PropertiesPanel() {
                   {selectedNode.data.type === 'seoWriter' && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
                           Keywords
                         </label>
                         <input
                           type="text"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-gray-50 hover:bg-white focus:bg-white transition-colors"
+                          placeholder="Enter keywords"
                           value={selectedNode.data.parameters?.keywords || ''}
                           onChange={(e) => 
                             updateNodeData(selectedNode.id, 'keywords', e.target.value)
@@ -154,11 +179,11 @@ export default function PropertiesPanel() {
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
                           Content Length
                         </label>
                         <select
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-gray-50 hover:bg-white focus:bg-white transition-colors appearance-none"
                           value={selectedNode.data.parameters?.contentLength || 'medium'}
                           onChange={(e) =>
                             updateNodeData(selectedNode.id, 'contentLength', e.target.value)
@@ -175,11 +200,11 @@ export default function PropertiesPanel() {
                   {selectedNode.data.type === 'emailBlast' && (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
                           Recipient List
                         </label>
                         <select
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-gray-50 hover:bg-white focus:bg-white transition-colors appearance-none"
                           value={selectedNode.data.parameters?.recipientList || 'all'}
                           onChange={(e) =>
                             updateNodeData(selectedNode.id, 'recipientList', e.target.value)
@@ -191,12 +216,13 @@ export default function PropertiesPanel() {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
                           Email Subject
                         </label>
                         <input
                           type="text"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-gray-50 hover:bg-white focus:bg-white transition-colors"
+                          placeholder="Email subject line"
                           value={selectedNode.data.parameters?.subject || ''}
                           onChange={(e) =>
                             updateNodeData(selectedNode.id, 'subject', e.target.value)
@@ -208,12 +234,13 @@ export default function PropertiesPanel() {
                   
                   {/* Default parameters for any node type */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
                       Description
                     </label>
                     <textarea
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-gray-50 hover:bg-white focus:bg-white transition-colors"
+                      rows={2}
+                      placeholder="Enter node description"
                       value={selectedNode.data.description || ''}
                       onChange={(e) => {
                         setNodes((nodes) =>
@@ -236,12 +263,12 @@ export default function PropertiesPanel() {
                 </div>
               </div>
               
-              <div className="mt-6 pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">ID: {selectedNode.id}</span>
+              <div className="mt-4 pt-3 border-t border-gray-200">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] text-gray-400 truncate overflow-hidden flex-grow">ID: {selectedNode.id}</span>
                   <div className="flex space-x-2">
                     <button
-                      className="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded text-xs"
+                      className="px-2 py-1 bg-gray-50 hover:bg-gray-100 border border-gray-300 rounded text-xs transition-colors"
                       onClick={() => {
                         setNodes((nodes) =>
                           nodes.map((node) => {
@@ -259,16 +286,25 @@ export default function PropertiesPanel() {
                       Deselect
                     </button>
                     <button
-                      className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-xs"
+                      className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-xs transition-colors"
                       onClick={() => {
                         setNodes((nodes) =>
                           nodes.filter((node) => node.id !== selectedNode.id)
                         );
                       }}
                     >
-                      Remove
+                      Delete
                     </button>
                   </div>
+                </div>
+                
+                <div className="mt-3 pt-2 border-t border-gray-100 flex justify-end">
+                  <button
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-medium transition-colors"
+                    onClick={() => {/* Apply changes function would go here */}}
+                  >
+                    Apply
+                  </button>
                 </div>
               </div>
             </div>

@@ -57,7 +57,7 @@ function WorkflowCanvas({
   }, [setEdges, readOnly]);
 
   return (
-    <div className="workflow-container" style={{ width: '100%', height: '600px' }}>
+    <div className="workflow-container workflow-page">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -70,19 +70,41 @@ function WorkflowCanvas({
         elementsSelectable={!readOnly}
         fitView
       >
-        <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
-        <Controls showInteractive={!readOnly} />
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#e2e8f0" />
+        <Controls 
+          showInteractive={!readOnly} 
+          className="react-flow__controls-button bg-white border border-gray-200 shadow-sm"
+          style={{
+            borderRadius: '8px',
+            padding: '4px',
+            backgroundColor: 'white',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+          }}
+        />
         <MiniMap 
           nodeStrokeColor="#aaa" 
           nodeColor={(node) => {
             return (node.data?.color || '#eee') + '80';
-          }} 
+          }}
+          className="bg-white rounded-lg border border-gray-100 shadow-sm"
+          style={{ padding: '8px' }}
         />
         <Panel position="top-left" className="workflow-info-panel">
           <h3 className="text-xl font-bold">{title}</h3>
           {description && <p className="text-sm text-gray-600">{description}</p>}
           <div className="text-xs text-gray-500 mt-1">
             {workflowStats.nodeCount} nodes · {workflowStats.edgeCount} connections
+          </div>
+        </Panel>
+        
+        <Panel position="top-right">
+          <div className="flex gap-2 bg-white rounded-lg border border-gray-100 shadow-sm p-2">
+            <button className="px-3 py-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 rounded-md hover:bg-indigo-100">
+              Run
+            </button>
+            <button className="px-3 py-1.5 text-xs font-medium border border-gray-200 rounded-md hover:bg-gray-50">
+              Save
+            </button>
           </div>
         </Panel>
       </ReactFlow>

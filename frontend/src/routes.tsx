@@ -1,16 +1,14 @@
 import {
   createRoute,
-  createRootRoute,
   createRootRouteWithContext,
   Outlet,
-  Link,
 } from '@tanstack/react-router'
 import { QueryClient } from '@tanstack/react-query'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 
-import App from './App'
 import WorkflowListPage from './pages/workflow/WorkflowListPage'
 import WorkflowPage from './pages/workflow/WorkflowPage'
+import { Navbar } from './components/layout/Navbar'
 
 // Root route with authentication check
 export const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
@@ -23,32 +21,23 @@ export const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }
   },
   component: () => (
     <>
-      <div className="p-2 flex gap-2 bg-white border-b">
-        <Link to="/" className="[&.active]:font-bold">
-          Home
-        </Link>
-        <Link to="/workflow" className="[&.active]:font-bold">
-          Workflows
-        </Link>
-        <Link to="/about" className="[&.active]:font-bold">
-          About
-        </Link>
-      </div>
-      <div className="p-4">
+      <Navbar />
+      <main>
         <Outlet />
-      </div>
+      </main>
       <TanStackRouterDevtools />
     </>
   ),
 })
 
+// Import the Index component directly instead of using the Route export
+import { Index as HomePage } from './routes/index'
+
 // Home route
 export const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  component: function Index() {
-    return <App />
-  },
+  component: HomePage,
 })
 
 // About route (existing)
@@ -86,7 +75,8 @@ export const workflowDetailRoute = createRoute({
   getParentRoute: () => workflowRoute,
   path: '$workflowId',
   component: function WorkflowDetail() {
-    const { workflowId } = workflowDetailRoute.useParams()
+    // We can use workflowId later when implementing the workflow page properly
+    // const { workflowId } = workflowDetailRoute.useParams()
     return <WorkflowPage />
   },
 })

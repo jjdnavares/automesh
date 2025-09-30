@@ -5,43 +5,43 @@ export const nodeTypes = {
   start: {
     type: 'start',
     label: 'Start',
-    icon: '▶️',
+    icon: '⏺',
     color: '#4CAF50'
   },
   process: {
     type: 'process',
     label: 'Process',
-    icon: '⚙️',
+    icon: '⚙',
     color: '#2196F3'
   },
   decision: {
     type: 'decision',
     label: 'Decision',
-    icon: '❓',
+    icon: '◆',
     color: '#FF9800'
   },
   end: {
     type: 'end',
     label: 'End',
-    icon: '🏁',
+    icon: '⏹',
     color: '#F44336'
   },
   approval: {
     type: 'approval',
     label: 'Approval',
-    icon: '✅',
+    icon: '✓',
     color: '#9C27B0'
   },
   document: {
     type: 'document',
     label: 'Document',
-    icon: '📄',
+    icon: '◰',
     color: '#607D8B'
   },
   data: {
     type: 'data',
     label: 'Data',
-    icon: '💾',
+    icon: '◳',
     color: '#00BCD4'
   }
 };
