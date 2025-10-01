@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useWorkflowStore } from '../../store/workflow/workflowStore';
 import { Badge } from '@/components/ui/badge';
-import { Search, Filter, ChevronDown, SortAsc, SortDesc, Clock, Plus, Copy, Trash2, Edit } from 'lucide-react';
+import { Search, Filter, SortAsc, SortDesc, Clock, Plus, Copy, Trash2, Edit } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -66,6 +66,7 @@ export default function WorkflowListPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('updatedAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Statistics
   const [stats, setStats] = useState({
@@ -98,13 +99,21 @@ export default function WorkflowListPage() {
     });
   }, [workflowList]);
 
-  const handleCreateWorkflow = () => {
-    if (newWorkflowName) {
-      createNewWorkflow(newWorkflowName, newWorkflowDescription);
-      setNewWorkflowName('');
-      setNewWorkflowDescription('');
-      setIsCreating(false);
-      // Redirect to the new workflow will be handled by the router
+  const handleCreateWorkflow = async () => {
+    if (newWorkflowName && !isSubmitting) {
+      setIsSubmitting(true);
+      try {
+        await createNewWorkflow(newWorkflowName, newWorkflowDescription);
+        setNewWorkflowName('');
+        setNewWorkflowDescription('');
+        setIsCreating(false);
+        // Redirect to the new workflow will be handled by the router
+      } catch (error) {
+        console.error('Failed to create workflow:', error);
+        // Keep the dialog open on error so user can retry
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -260,8 +269,8 @@ export default function WorkflowListPage() {
               </div>
               
               <div className="flex justify-end">
-                <Button onClick={handleCreateWorkflow} disabled={!newWorkflowName}>
-                  Create Workflow
+                <Button onClick={handleCreateWorkflow} disabled={!newWorkflowName || isSubmitting}>
+                  {isSubmitting ? 'Creating...' : 'Create Workflow'}
                 </Button>
               </div>
             </div>

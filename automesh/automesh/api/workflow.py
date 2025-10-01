@@ -6,62 +6,87 @@ from typing import Dict, List, Any, Optional, Union
 
 
 @frappe.whitelist()
-def get_workflows():
-    """Get all workflows that the current user has access to"""
+def get_workflows(limit=None, offset=None, search=None, tags=None, is_active=None, sort_by="modified", sort_order="desc"):
+    """Get all workflows that the current user has access to with filtering and pagination"""
     user = frappe.session.user
     
     # Check if the user is an administrator
     is_admin = "System Manager" in frappe.get_roles()
     
-    if is_admin:
-        # Admins can see all workflows
-        workflows = frappe.get_all(
-            "Workflow",
-            fields=["name", "workflow_name", "description", "is_active", "creation", "modified", "owner", "execution_count"],
-            order_by="modified desc"
-        )
-    else:
-        # Regular users can see workflows they own or are shared with them
-        workflows = frappe.get_all(
-            "Workflow",
-            filters=[["owner", "=", user]],
-            fields=["name", "workflow_name", "description", "is_active", "creation", "modified", "owner", "execution_count"],
-            order_by="modified desc"
-        )
+    # Build filters
+    filters = {}
+    if not is_admin:
+        filters["created_by"] = user
+    
+    if is_active is not None:
+        filters["is_active"] = 1 if is_active else 0
+    
+    # Get workflows
+    workflows = frappe.get_all(
+        "Automesh Workflow",
+        filters=filters,
+        fields=["name", "title", "description", "is_active", "tags", "version", 
+                "created_at", "updated_at", "last_executed_at", "execution_count", "created_by"],
+        order_by=f"{sort_by} {sort_order}",
+        limit=limit,
+        start=offset
+    )
+    
+    # Apply search filter if provided
+    if search:
+        search_lower = search.lower()
+        workflows = [w for w in workflows if 
+                    search_lower in (w.title or "").lower() or 
+                    search_lower in (w.description or "").lower()]
+    
+    # Apply tags filter if provided
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",")]
+        workflows = [w for w in workflows if w.tags and 
+                    any(tag in w.tags for tag in tag_list)]
     
     result = []
     for workflow in workflows:
-        # Get the nodes and edges for each workflow
-        nodes = frappe.get_all(
-            "Workflow Node",
-            filters={"parent": workflow.name},
-            fields=["*"]
-        )
-        
-        edges = frappe.get_all(
-            "Workflow Edge",
-            filters={"parent": workflow.name},
-            fields=["*"]
-        )
+        # Parse workflow JSON to get nodes and edges
+        workflow_json = {}
+        if workflow.name:
+            doc = frappe.get_doc("Automesh Workflow", workflow.name)
+            if doc.workflow_json:
+                try:
+                    workflow_json = json.loads(doc.workflow_json)
+                except:
+                    workflow_json = {"nodes": [], "edges": []}
         
         # Format the result to match our frontend data model
         formatted_workflow = {
             "id": workflow.name,
-            "name": workflow.workflow_name,
-            "description": workflow.description,
-            "nodes": _format_nodes(nodes),
-            "edges": _format_edges(edges),
+            "name": workflow.title,
+            "description": workflow.description or "",
+            "tags": workflow.tags or "",
+            "version": workflow.version or "1.0.0",
+            "nodes": workflow_json.get("nodes", []),
+            "edges": workflow_json.get("edges", []),
             "metadata": {
-                "createdAt": workflow.creation,
-                "updatedAt": workflow.modified,
+                "createdAt": workflow.created_at or workflow.get("creation"),
+                "updatedAt": workflow.updated_at or workflow.get("modified"),
+                "lastExecutedAt": workflow.last_executed_at,
                 "executionCount": workflow.execution_count or 0,
-                "isActive": workflow.is_active == 1
+                "isActive": workflow.is_active == 1,
+                "createdBy": workflow.created_by
             }
         }
         
         result.append(formatted_workflow)
     
-    return result
+    # Get total count for pagination
+    total = frappe.db.count("Automesh Workflow", filters)
+    
+    return {
+        "workflows": result,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
 
 
 @frappe.whitelist()
@@ -75,20 +100,32 @@ def get_workflow(workflow_id):
         frappe.throw(_("You don't have permission to access this workflow"))
     
     # Get the workflow
-    workflow = frappe.get_doc("Workflow", workflow_id)
+    workflow = frappe.get_doc("Automesh Workflow", workflow_id)
+    
+    # Parse workflow JSON
+    workflow_json = {"nodes": [], "edges": []}
+    if workflow.workflow_json:
+        try:
+            workflow_json = json.loads(workflow.workflow_json)
+        except:
+            pass
     
     # Format the result to match our frontend data model
     formatted_workflow = {
         "id": workflow.name,
-        "name": workflow.workflow_name,
-        "description": workflow.description,
-        "nodes": _format_nodes(workflow.nodes),
-        "edges": _format_edges(workflow.edges),
+        "name": workflow.title,
+        "description": workflow.description or "",
+        "tags": workflow.tags or "",
+        "version": workflow.version or "1.0.0",
+        "nodes": workflow_json.get("nodes", []),
+        "edges": workflow_json.get("edges", []),
         "metadata": {
-            "createdAt": workflow.creation,
-            "updatedAt": workflow.modified,
+            "createdAt": workflow.created_at or workflow.creation,
+            "updatedAt": workflow.updated_at or workflow.modified,
+            "lastExecutedAt": workflow.last_executed_at,
             "executionCount": workflow.execution_count or 0,
-            "isActive": workflow.is_active == 1
+            "isActive": workflow.is_active == 1,
+            "createdBy": workflow.created_by or workflow.owner
         }
     }
     
@@ -101,18 +138,23 @@ def create_workflow():
     workflow_data = json.loads(frappe.request.data)
     
     # Create a new workflow
-    workflow = frappe.new_doc("Workflow")
-    workflow.workflow_name = workflow_data.get("name", "New Workflow")
+    workflow = frappe.new_doc("Automesh Workflow")
+    workflow.title = workflow_data.get("name", "New Workflow")
     workflow.description = workflow_data.get("description", "")
+    workflow.version = workflow_data.get("version", "1.0.0")
+    workflow.tags = workflow_data.get("tags", "")
     workflow.is_active = 0  # Default to inactive
     workflow.execution_count = 0
+    workflow.created_at = now()
+    workflow.updated_at = now()
+    workflow.created_by = frappe.session.user
     
-    # If nodes and edges are provided, add them to the workflow
-    if "nodes" in workflow_data:
-        _add_nodes_to_workflow(workflow, workflow_data["nodes"])
-    
-    if "edges" in workflow_data:
-        _add_edges_to_workflow(workflow, workflow_data["edges"])
+    # Store nodes and edges as JSON
+    workflow_json = {
+        "nodes": workflow_data.get("nodes", []),
+        "edges": workflow_data.get("edges", [])
+    }
+    workflow.workflow_json = json.dumps(workflow_json)
     
     workflow.insert()
     
@@ -135,30 +177,40 @@ def update_workflow():
         frappe.throw(_("You don't have permission to update this workflow"))
     
     # Get the existing workflow
-    workflow = frappe.get_doc("Workflow", workflow_id)
+    workflow = frappe.get_doc("Automesh Workflow", workflow_id)
     
     # Update basic workflow fields
     if workflow_data.get("name"):
-        workflow.workflow_name = workflow_data["name"]
+        workflow.title = workflow_data["name"]
     
     if "description" in workflow_data:
         workflow.description = workflow_data["description"]
     
+    if "tags" in workflow_data:
+        workflow.tags = workflow_data["tags"]
+    
+    if "version" in workflow_data:
+        workflow.version = workflow_data["version"]
+    
     if "metadata" in workflow_data and "isActive" in workflow_data["metadata"]:
         workflow.is_active = 1 if workflow_data["metadata"]["isActive"] else 0
     
-    # Clear existing nodes and edges
-    workflow.nodes = []
-    workflow.edges = []
+    # Update workflow JSON with nodes and edges
+    workflow_json = {}
+    if workflow.workflow_json:
+        try:
+            workflow_json = json.loads(workflow.workflow_json)
+        except:
+            workflow_json = {}
     
-    # Add updated nodes and edges
     if "nodes" in workflow_data:
-        _add_nodes_to_workflow(workflow, workflow_data["nodes"])
+        workflow_json["nodes"] = workflow_data["nodes"]
     
     if "edges" in workflow_data:
-        _add_edges_to_workflow(workflow, workflow_data["edges"])
+        workflow_json["edges"] = workflow_data["edges"]
     
-    workflow.modified = now()
+    workflow.workflow_json = json.dumps(workflow_json)
+    workflow.updated_at = now()
     workflow.save()
     
     # Return the updated workflow
@@ -179,7 +231,7 @@ def delete_workflow():
         frappe.throw(_("You don't have permission to delete this workflow"))
     
     # Delete the workflow
-    frappe.delete_doc("Workflow", workflow_id)
+    frappe.delete_doc("Automesh Workflow", workflow_id)
     
     return {"success": True}
 
@@ -208,8 +260,9 @@ def execute_workflow():
     execution.insert()
     
     # Increment execution count
-    workflow = frappe.get_doc("Workflow", workflow_id)
+    workflow = frappe.get_doc("Automesh Workflow", workflow_id)
     workflow.execution_count = (workflow.execution_count or 0) + 1
+    workflow.last_executed_at = now()
     workflow.save()
     
     # Start the execution process in the background
@@ -385,6 +438,157 @@ def create_from_template():
     return get_workflow(workflow.name)
 
 
+# New Phase 1 API Endpoints
+
+@frappe.whitelist()
+def duplicate_workflow():
+    """Duplicate an existing workflow"""
+    data = json.loads(frappe.request.data)
+    workflow_id = data.get("workflow_id")
+    new_name = data.get("new_name")
+    
+    if not workflow_id:
+        frappe.throw(_("Workflow ID is required"))
+    
+    # Check permissions
+    if not _can_access_workflow(workflow_id):
+        frappe.throw(_("You don't have permission to duplicate this workflow"))
+    
+    # Get original workflow
+    original = frappe.get_doc("Automesh Workflow", workflow_id)
+    
+    # Create duplicate
+    duplicate = frappe.copy_doc(original)
+    duplicate.title = new_name or f"{original.title} (Copy)"
+    duplicate.is_active = 0
+    duplicate.execution_count = 0
+    duplicate.last_executed_at = None
+    duplicate.created_at = now()
+    duplicate.updated_at = now()
+    duplicate.created_by = frappe.session.user
+    duplicate.insert()
+    
+    return get_workflow(duplicate.name)
+
+
+@frappe.whitelist()
+def toggle_workflow_status():
+    """Toggle workflow active status"""
+    data = json.loads(frappe.request.data)
+    workflow_id = data.get("workflow_id")
+    is_active = data.get("is_active")
+    
+    if not workflow_id:
+        frappe.throw(_("Workflow ID is required"))
+    
+    if not _can_access_workflow(workflow_id):
+        frappe.throw(_("You don't have permission to update this workflow"))
+    
+    workflow = frappe.get_doc("Automesh Workflow", workflow_id)
+    workflow.is_active = 1 if is_active else 0
+    workflow.updated_at = now()
+    workflow.save()
+    
+    return {"success": True, "is_active": workflow.is_active}
+
+
+@frappe.whitelist()
+def get_workflow_statistics(days=7):
+    """Get workflow statistics for dashboard"""
+    user = frappe.session.user
+    is_admin = "System Manager" in frappe.get_roles()
+    
+    # Date range
+    from frappe.utils import add_days
+    from_date = add_days(now(), -int(days))
+    
+    # Get workflows count
+    workflow_filters = {}
+    if not is_admin:
+        workflow_filters["created_by"] = user
+    
+    total_workflows = frappe.db.count("Automesh Workflow", workflow_filters)
+    active_workflows = frappe.db.count("Automesh Workflow", {**workflow_filters, "is_active": 1})
+    
+    # Get executions in date range
+    exec_filters = {"start_time": [">=", from_date]}
+    if not is_admin:
+        # Filter by user's workflows
+        user_workflows = frappe.get_all(
+            "Automesh Workflow",
+            filters={"created_by": user},
+            pluck="name"
+        )
+        if user_workflows:
+            exec_filters["workflow"] = ["in", user_workflows]
+        else:
+            # No workflows, return zeros
+            return {
+                "total_workflows": 0,
+                "active_workflows": 0,
+                "total_executions": 0,
+                "completed": 0,
+                "failed": 0,
+                "failure_rate": "0%",
+                "time_saved": "0h",
+                "avg_runtime": "0s"
+            }
+    
+    executions = frappe.get_all(
+        "Automesh Execution",
+        filters=exec_filters,
+        fields=["status", "start_time", "end_time"]
+    )
+    
+    total_executions = len(executions)
+    completed = len([e for e in executions if e.status == "completed"])
+    failed = len([e for e in executions if e.status == "failed"])
+    
+    # Calculate metrics
+    failure_rate = (failed / total_executions * 100) if total_executions > 0 else 0
+    
+    # Calculate time saved (estimate: 5 min per execution)
+    time_saved_minutes = completed * 5
+    time_saved_hours = time_saved_minutes / 60
+    
+    # Calculate average runtime
+    runtimes = []
+    for e in executions:
+        if e.start_time and e.end_time:
+            runtime = (e.end_time - e.start_time).total_seconds()
+            runtimes.append(runtime)
+    
+    avg_runtime = sum(runtimes) / len(runtimes) if runtimes else 0
+    
+    return {
+        "total_workflows": total_workflows,
+        "active_workflows": active_workflows,
+        "total_executions": total_executions,
+        "completed": completed,
+        "failed": failed,
+        "failure_rate": f"{failure_rate:.1f}%",
+        "time_saved": f"{time_saved_hours:.1f}h",
+        "avg_runtime": f"{avg_runtime:.1f}s"
+    }
+
+
+@frappe.whitelist()
+def get_all_tags():
+    """Get all unique tags used in workflows"""
+    workflows = frappe.get_all(
+        "Automesh Workflow",
+        fields=["tags"]
+    )
+    
+    all_tags = set()
+    for w in workflows:
+        if w.tags:
+            tags = [t.strip() for t in w.tags.split(",")]
+            all_tags.update(tags)
+    
+    return sorted(list(all_tags))
+
+
 # Helper functions
 def _can_access_workflow(workflow_id, require_admin=False):
     """Check if the current user can access the workflow"""
@@ -399,198 +603,23 @@ def _can_access_workflow(workflow_id, require_admin=False):
         return False
     
     # Check if the user is the owner
-    workflow = frappe.get_doc("Workflow", workflow_id)
-    return workflow.owner == user
-
-
-def _format_nodes(nodes):
-    """Format workflow nodes to match frontend data model"""
-    formatted_nodes = []
-    for node in nodes:
-        formatted_node = {
-            "id": node.node_id,
-            "type": "custom",  # We use a single custom node component in frontend
-            "position": {
-                "x": node.position_x,
-                "y": node.position_y
-            },
-            "data": {
-                "type": node.node_type,
-                "label": node.label,
-                "icon": node.icon,
-                "color": node.color,
-                "status": "idle",
-                "params": json.loads(node.parameters) if node.parameters else {},
-                # Add input/output sockets based on the node type
-                # This would normally come from the node type definition
-                "inputSockets": [],
-                "outputSockets": []
-            }
-        }
-        
-        # Get node type definition to determine input/output sockets
-        try:
-            node_type = frappe.get_doc("Workflow Node Type", node.node_type)
-            formatted_node["data"]["inputSockets"] = json.loads(node_type.inputs) if node_type.inputs else []
-            formatted_node["data"]["outputSockets"] = json.loads(node_type.outputs) if node_type.outputs else []
-        except:
-            # If node type not found, use default sockets
-            formatted_node["data"]["inputSockets"] = [{"id": "input-default", "label": "Input"}]
-            formatted_node["data"]["outputSockets"] = [{"id": "output-default", "label": "Output"}]
-        
-        formatted_nodes.append(formatted_node)
-    
-    return formatted_nodes
-
-
-def _format_edges(edges):
-    """Format workflow edges to match frontend data model"""
-    formatted_edges = []
-    for edge in edges:
-        formatted_edge = {
-            "id": edge.edge_id,
-            "source": edge.source_node,
-            "sourceHandle": edge.source_handle,
-            "target": edge.target_node,
-            "targetHandle": edge.target_handle,
-            "type": "custom",  # We use a single custom edge component in frontend
-            "data": {
-                "label": edge.label or ""
-            }
-        }
-        
-        formatted_edges.append(formatted_edge)
-    
-    return formatted_edges
-
-
-def _add_nodes_to_workflow(workflow, nodes):
-    """Add nodes to a workflow document"""
-    for node in nodes:
-        node_data = {
-            "node_id": node["id"],
-            "node_type": node["data"].get("type", "default"),
-            "position_x": node["position"]["x"],
-            "position_y": node["position"]["y"],
-            "label": node["data"].get("label", ""),
-            "icon": node["data"].get("icon", "📄"),
-            "color": node["data"].get("color", "#3182CE"),
-            "parameters": json.dumps(node["data"].get("params", {}))
-        }
-        workflow.append("nodes", node_data)
-
-
-def _add_edges_to_workflow(workflow, edges):
-    """Add edges to a workflow document"""
-    for edge in edges:
-        edge_data = {
-            "edge_id": edge["id"],
-            "source_node": edge["source"],
-            "source_handle": edge.get("sourceHandle", ""),
-            "target_node": edge["target"],
-            "target_handle": edge.get("targetHandle", ""),
-            "label": edge.get("data", {}).get("label", "")
-        }
-        workflow.append("edges", edge_data)
+    workflow = frappe.get_doc("Automesh Workflow", workflow_id)
+    return workflow.created_by == user or workflow.owner == user
 
 
 def _start_workflow_execution(execution_id):
-    """Start executing a workflow (simulation)"""
-    execution = frappe.get_doc("Workflow Execution", execution_id)
-    workflow = frappe.get_doc("Workflow", execution.workflow)
-    
-    # Get start nodes (nodes with no incoming edges)
-    incoming_edges = {edge.target_node for edge in workflow.edges}
-    start_nodes = [node for node in workflow.nodes if node.node_id not in incoming_edges]
-    
-    # Create node executions for all nodes
-    for node in workflow.nodes:
-        # Create node execution
-        node_execution = frappe.new_doc("Workflow Node Execution")
-        node_execution.parent = execution_id
-        node_execution.parentfield = "node_executions"
-        node_execution.parenttype = "Workflow Execution"
-        node_execution.node_id = node.node_id
-        node_execution.status = "Pending"
-        
-        execution.append("node_executions", node_execution)
-    
-    execution.save()
-    
-    # In a real implementation, we would use a job queue to process the nodes
-    # For simulation, we'll just mark the execution as successful after a brief delay
+    """Start executing a workflow (simplified simulation for Phase 1)"""
+    # Note: This is a simplified simulation for Phase 1
+    # In production, this would use the workflow engine
     import time
     
-    # Mark start nodes as running
-    for node in start_nodes:
-        _update_node_execution_status(execution_id, node.node_id, "Running")
-    
-    time.sleep(1)  # Simulate processing time
-    
-    # Mark start nodes as completed
-    for node in start_nodes:
-        _update_node_execution_status(execution_id, node.node_id, "Completed")
-    
-    # Find next nodes in the graph and mark them
-    processed_nodes = {node.node_id for node in start_nodes}
-    next_nodes = _get_next_nodes(workflow, processed_nodes)
-    
-    # Process all remaining nodes in sequence
-    while next_nodes:
-        for node_id in next_nodes:
-            _update_node_execution_status(execution_id, node_id, "Running")
-        
-        time.sleep(1)  # Simulate processing time
-        
-        for node_id in next_nodes:
-            _update_node_execution_status(execution_id, node_id, "Completed")
-        
-        processed_nodes.update(next_nodes)
-        next_nodes = _get_next_nodes(workflow, processed_nodes)
-    
-    # Mark the execution as completed
     execution = frappe.get_doc("Workflow Execution", execution_id)
+    
+    # Simulate execution
+    time.sleep(2)
+    
+    # Mark as completed
     execution.status = "Completed"
     execution.end_time = now()
     execution.output_data = json.dumps({"result": "Workflow executed successfully"})
     execution.save()
-
-
-def _update_node_execution_status(execution_id, node_id, status, message=None):
-    """Update the status of a node execution"""
-    # Find the node execution
-    execution = frappe.get_doc("Workflow Execution", execution_id)
-    node_execution = next((ne for ne in execution.node_executions if ne.node_id == node_id), None)
-    
-    if node_execution:
-        node_execution.status = status
-        if message:
-            node_execution.message = message
-        
-        if status == "Running":
-            node_execution.start_time = now()
-        elif status in ["Completed", "Failed", "Stopped"]:
-            node_execution.end_time = now()
-        
-        execution.save()
-
-
-def _get_next_nodes(workflow, processed_nodes):
-    """Get the next nodes to process based on the workflow graph"""
-    next_nodes = set()
-    
-    for edge in workflow.edges:
-        if edge.source_node in processed_nodes and edge.target_node not in processed_nodes:
-            # Check if all incoming edges to this target have been processed
-            all_sources_processed = True
-            for other_edge in workflow.edges:
-                if (other_edge.target_node == edge.target_node and
-                    other_edge.source_node != edge.source_node and
-                    other_edge.source_node not in processed_nodes):
-                    all_sources_processed = False
-                    break
-            
-            if all_sources_processed:
-                next_nodes.add(edge.target_node)
-    
-    return next_nodes
