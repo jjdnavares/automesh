@@ -24,11 +24,11 @@ export function Navbar() {
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
             <Link 
-              to="/" 
+              to="/app" 
               className="flex items-center text-gray-600 hover:text-indigo-600 px-3 py-2 text-sm font-medium [&.active]:text-indigo-600 [&.active]:font-semibold border-b-2 border-transparent hover:border-indigo-600 transition-colors"
             >
               <Activity className="h-4 w-4 mr-1.5" />
-              Home
+              Desk
             </Link>
             <Link 
               to="/workflow" 
@@ -79,12 +79,12 @@ export function Navbar() {
         <div className="md:hidden bg-white shadow-lg border-t">
           <div className="space-y-1 px-4 pb-3 pt-2">
             <Link
-              to="/"
+              to="/app"
               className="flex items-center rounded-md px-3 py-2 text-base font-medium text-gray-700 hover:bg-gray-50 hover:text-indigo-600 [&.active]:bg-indigo-50 [&.active]:text-indigo-600"
               onClick={() => setMobileMenuOpen(false)}
             >
               <Activity className="h-5 w-5 mr-2 text-indigo-500" />
-              Home
+              Desk
             </Link>
             <Link
               to="/workflow"

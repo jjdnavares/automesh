@@ -19,7 +19,7 @@ import type {
   ExecutionStatus,
 } from '../../types/workflow';
 import { nodeTypes, initialNodes, initialEdges } from '../../components/workflow/nodes/NodeTypes';
-import { workflowApi } from '../../services/workflow/workflowApi';
+import { workflowApi, type WorkflowQueryParams } from '../../services/workflow/workflowApi';
 import { v4 as uuidv4 } from 'uuid';
 
 // Define the workflow store state and actions
@@ -38,6 +38,8 @@ interface WorkflowStore extends WorkflowState {
   loadWorkflow: (id: string) => Promise<void>;
   saveWorkflow: () => Promise<void>;
   deleteWorkflow: (id: string) => Promise<void>;
+  duplicateWorkflow: (id: string, newName?: string) => Promise<string>;
+  toggleWorkflowStatus: (id: string, isActive: boolean) => Promise<void>;
   exportWorkflow: (id: string) => Promise<string>;
   importWorkflow: (data: string) => void;
   
@@ -58,8 +60,31 @@ interface WorkflowStore extends WorkflowState {
   checkExecutionStatus: (executionId: string) => Promise<void>;
   
   // API-related actions
-  fetchWorkflows: () => Promise<void>;
+  fetchWorkflows: (params?: WorkflowQueryParams) => Promise<void>;
   fetchNodeTypes: () => Promise<void>;
+  fetchWorkflowStatistics: (days?: number) => Promise<any>;
+  fetchAllTags: () => Promise<string[]>;
+  
+  // Phase 2 actions
+  bulkDeleteWorkflows: (workflowIds: string[]) => Promise<any>;
+  bulkUpdateStatus: (workflowIds: string[], isActive: boolean) => Promise<any>;
+  getWorkflowExecutions: (workflowId: string, limit?: number, offset?: number, status?: string) => Promise<any>;
+  getTemplates: (category?: string) => Promise<any[]>;
+  createWorkflowFromTemplate: (templateId: string, workflowName?: string) => Promise<string>;
+  exportWorkflowToFile: (workflowId: string) => Promise<void>;
+  importWorkflowFromFile: (file: File) => Promise<string>;
+  quickExecuteWorkflow: (workflowId: string, inputData?: any) => Promise<string>;
+  
+  // Sharing actions
+  shareWorkflow: (workflowId: string, sharedWith: string, permissionLevel: string, expiresAt?: string) => Promise<any>;
+  getWorkflowShares: (workflowId: string) => Promise<any[]>;
+  revokeWorkflowShare: (shareId: string) => Promise<void>;
+  updateWorkflowShare: (shareId: string, permissionLevel: string) => Promise<void>;
+  
+  // Pagination and filtering state
+  workflowsTotal: number;
+  workflowsLimit: number;
+  workflowsOffset: number;
 }
 
 // Create the workflow store
@@ -79,6 +104,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   nodeExecutionStatuses: {},
   isLoading: false,
   error: null,
+  workflowsTotal: 0,
+  workflowsLimit: 20,
+  workflowsOffset: 0,
   
   // Nodes and Edges Actions
   onNodesChange: (changes: NodeChange[]) => {
@@ -429,6 +457,64 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         isLoading: false, 
         error: error instanceof Error ? error.message : `Failed to delete workflow ${id}` 
       });
+      throw error;
+    }
+  },
+  
+  duplicateWorkflow: async (id: string, newName?: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      // Duplicate via API
+      const duplicatedWorkflow = await workflowApi.duplicateWorkflow(id, newName);
+      
+      // Update the workflows in the store
+      const newWorkflows = { ...get().workflows };
+      newWorkflows[duplicatedWorkflow.id] = duplicatedWorkflow;
+      
+      set({
+        workflows: newWorkflows,
+        isLoading: false
+      });
+      
+      return duplicatedWorkflow.id;
+    } catch (error) {
+      console.error(`Failed to duplicate workflow ${id}:`, error);
+      set({ 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : `Failed to duplicate workflow ${id}` 
+      });
+      throw error;
+    }
+  },
+  
+  toggleWorkflowStatus: async (id: string, isActive: boolean) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      // Toggle via API
+      await workflowApi.toggleWorkflowStatus(id, isActive);
+      
+      // Update the workflow in the store
+      const newWorkflows = { ...get().workflows };
+      if (newWorkflows[id]) {
+        newWorkflows[id] = {
+          ...newWorkflows[id],
+          isActive
+        };
+      }
+      
+      set({
+        workflows: newWorkflows,
+        isLoading: false
+      });
+    } catch (error) {
+      console.error(`Failed to toggle workflow status ${id}:`, error);
+      set({ 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : `Failed to toggle workflow status ${id}` 
+      });
+      throw error;
     }
   },
   
@@ -640,21 +726,24 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
   
   // API-related actions
-  fetchWorkflows: async () => {
+  fetchWorkflows: async (params?: WorkflowQueryParams) => {
     try {
       set({ isLoading: true, error: null });
       
-      // Fetch workflows from API
-      const workflowsList = await workflowApi.getWorkflows();
+      // Fetch workflows from API with params
+      const response = await workflowApi.getWorkflows(params);
       
       // Convert to workflow map
-      const workflowsMap = workflowsList.reduce((acc, workflow) => {
+      const workflowsMap = response.workflows.reduce((acc, workflow) => {
         acc[workflow.id] = workflow;
         return acc;
       }, {} as Record<string, Workflow>);
       
       set({
         workflows: workflowsMap,
+        workflowsTotal: response.total,
+        workflowsLimit: response.limit,
+        workflowsOffset: response.offset,
         isLoading: false
       });
     } catch (error) {
@@ -689,6 +778,232 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         isLoading: false, 
         error: error instanceof Error ? error.message : 'Failed to fetch node types' 
       });
+    }
+  },
+  
+  fetchWorkflowStatistics: async (days: number = 7) => {
+    try {
+      const stats = await workflowApi.getWorkflowStatistics(days);
+      return stats;
+    } catch (error) {
+      console.error('Failed to fetch workflow statistics:', error);
+      throw error;
+    }
+  },
+  
+  fetchAllTags: async () => {
+    try {
+      const tags = await workflowApi.getAllTags();
+      return tags;
+    } catch (error) {
+      console.error('Failed to fetch tags:', error);
+      throw error;
+    }
+  },
+  
+  // Phase 2 Actions
+  bulkDeleteWorkflows: async (workflowIds: string[]) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const result = await workflowApi.bulkDeleteWorkflows(workflowIds);
+      
+      // Remove deleted workflows from store
+      const newWorkflows = { ...get().workflows };
+      result.deleted.forEach((id: string) => {
+        delete newWorkflows[id];
+      });
+      
+      set({
+        workflows: newWorkflows,
+        isLoading: false
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Failed to bulk delete workflows:', error);
+      set({ 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : 'Failed to bulk delete workflows' 
+      });
+      throw error;
+    }
+  },
+  
+  bulkUpdateStatus: async (workflowIds: string[], isActive: boolean) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const result = await workflowApi.bulkUpdateStatus(workflowIds, isActive);
+      
+      // Update workflows in store
+      const newWorkflows = { ...get().workflows };
+      result.updated.forEach((id: string) => {
+        if (newWorkflows[id]) {
+          newWorkflows[id] = {
+            ...newWorkflows[id],
+            isActive
+          };
+        }
+      });
+      
+      set({
+        workflows: newWorkflows,
+        isLoading: false
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('Failed to bulk update workflow status:', error);
+      set({ 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : 'Failed to bulk update workflow status' 
+      });
+      throw error;
+    }
+  },
+  
+  getWorkflowExecutions: async (workflowId: string, limit: number = 10, offset: number = 0, status?: string) => {
+    try {
+      const result = await workflowApi.getWorkflowExecutions(workflowId, limit, offset, status);
+      return result;
+    } catch (error) {
+      console.error(`Failed to get workflow executions for ${workflowId}:`, error);
+      throw error;
+    }
+  },
+  
+  getTemplates: async (category?: string) => {
+    try {
+      const templates = await workflowApi.getTemplates(category);
+      return templates;
+    } catch (error) {
+      console.error('Failed to get templates:', error);
+      throw error;
+    }
+  },
+  
+  createWorkflowFromTemplate: async (templateId: string, workflowName?: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const workflow = await workflowApi.createWorkflowFromTemplate(templateId, workflowName);
+      
+      // Add to workflows store
+      const newWorkflows = { ...get().workflows };
+      newWorkflows[workflow.id] = workflow;
+      
+      set({
+        workflows: newWorkflows,
+        isLoading: false
+      });
+      
+      return workflow.id;
+    } catch (error) {
+      console.error('Failed to create workflow from template:', error);
+      set({ 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : 'Failed to create workflow from template' 
+      });
+      throw error;
+    }
+  },
+  
+  exportWorkflowToFile: async (workflowId: string) => {
+    try {
+      const exportData = await workflowApi.exportWorkflow(workflowId);
+      
+      // Create a blob and download
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `workflow-${exportData.title || workflowId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(`Failed to export workflow ${workflowId}:`, error);
+      throw error;
+    }
+  },
+  
+  importWorkflowFromFile: async (file: File) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      const text = await file.text();
+      const importData = JSON.parse(text);
+      
+      const workflow = await workflowApi.importWorkflow(importData);
+      
+      // Add to workflows store
+      const newWorkflows = { ...get().workflows };
+      newWorkflows[workflow.id] = workflow;
+      
+      set({
+        workflows: newWorkflows,
+        isLoading: false
+      });
+      
+      return workflow.id;
+    } catch (error) {
+      console.error('Failed to import workflow:', error);
+      set({ 
+        isLoading: false, 
+        error: error instanceof Error ? error.message : 'Failed to import workflow' 
+      });
+      throw error;
+    }
+  },
+  
+  quickExecuteWorkflow: async (workflowId: string, inputData?: any) => {
+    try {
+      const result = await workflowApi.quickExecuteWorkflow(workflowId, inputData);
+      return result.execution_id;
+    } catch (error) {
+      console.error(`Failed to execute workflow ${workflowId}:`, error);
+      throw error;
+    }
+  },
+  
+  // Sharing Actions
+  shareWorkflow: async (workflowId: string, sharedWith: string, permissionLevel: string, expiresAt?: string) => {
+    try {
+      const result = await workflowApi.shareWorkflow(workflowId, sharedWith, permissionLevel, expiresAt);
+      return result;
+    } catch (error) {
+      console.error(`Failed to share workflow ${workflowId}:`, error);
+      throw error;
+    }
+  },
+  
+  getWorkflowShares: async (workflowId: string) => {
+    try {
+      const shares = await workflowApi.getWorkflowShares(workflowId);
+      return shares;
+    } catch (error) {
+      console.error(`Failed to get workflow shares for ${workflowId}:`, error);
+      throw error;
+    }
+  },
+  
+  revokeWorkflowShare: async (shareId: string) => {
+    try {
+      await workflowApi.revokeWorkflowShare(shareId);
+    } catch (error) {
+      console.error(`Failed to revoke workflow share ${shareId}:`, error);
+      throw error;
+    }
+  },
+  
+  updateWorkflowShare: async (shareId: string, permissionLevel: string) => {
+    try {
+      await workflowApi.updateWorkflowShare(shareId, permissionLevel);
+    } catch (error) {
+      console.error(`Failed to update workflow share ${shareId}:`, error);
+      throw error;
     }
   }
 }));

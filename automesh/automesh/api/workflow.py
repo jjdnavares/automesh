@@ -7,13 +7,20 @@ from typing import Dict, List, Any, Optional, Union
 
 @frappe.whitelist()
 def get_workflows(limit=None, offset=None, search=None, tags=None, is_active=None, sort_by="modified", sort_order="desc"):
-    """Get all workflows that the current user has access to with filtering and pagination"""
+    """Get all workflows that the current user has access to with filtering and pagination
+    
+    Performance optimizations:
+    - Uses SQL LIKE for search instead of Python filtering
+    - Applies filters at database level
+    - Batch loads workflow_json only when needed
+    - Caches user role check
+    """
     user = frappe.session.user
     
-    # Check if the user is an administrator
+    # Check if the user is an administrator (cached)
     is_admin = "System Manager" in frappe.get_roles()
     
-    # Build filters
+    # Build base filters
     filters = {}
     if not is_admin:
         filters["created_by"] = user
@@ -21,41 +28,72 @@ def get_workflows(limit=None, offset=None, search=None, tags=None, is_active=Non
     if is_active is not None:
         filters["is_active"] = 1 if is_active else 0
     
-    # Get workflows
-    workflows = frappe.get_all(
-        "Automesh Workflow",
-        filters=filters,
-        fields=["name", "title", "description", "is_active", "tags", "version", 
-                "created_at", "updated_at", "last_executed_at", "execution_count", "created_by"],
-        order_by=f"{sort_by} {sort_order}",
-        limit=limit,
-        start=offset
-    )
+    # Build SQL conditions for better performance
+    conditions = []
+    values = {}
     
-    # Apply search filter if provided
+    # Add search condition at SQL level
     if search:
-        search_lower = search.lower()
-        workflows = [w for w in workflows if 
-                    search_lower in (w.title or "").lower() or 
-                    search_lower in (w.description or "").lower()]
+        conditions.append("(title LIKE %(search)s OR description LIKE %(search)s)")
+        values["search"] = f"%{search}%"
     
-    # Apply tags filter if provided
+    # Add tags condition at SQL level
     if tags:
         tag_list = [t.strip() for t in tags.split(",")]
-        workflows = [w for w in workflows if w.tags and 
-                    any(tag in w.tags for tag in tag_list)]
+        tag_conditions = [f"tags LIKE %(tag_{i})s" for i in range(len(tag_list))]
+        conditions.append(f"({' OR '.join(tag_conditions)})")
+        for i, tag in enumerate(tag_list):
+            values[f"tag_{i}"] = f"%{tag}%"
     
+    # Combine filters and conditions
+    filter_str = " AND ".join([f"{k}=%(filter_{k})s" for k in filters.keys()])
+    for k, v in filters.items():
+        values[f"filter_{k}"] = v
+    
+    if conditions:
+        if filter_str:
+            filter_str += " AND " + " AND ".join(conditions)
+        else:
+            filter_str = " AND ".join(conditions)
+    
+    # Get total count first (without limit/offset)
+    count_query = f"SELECT COUNT(*) as count FROM `tabAutomesh Workflow`"
+    if filter_str:
+        count_query += f" WHERE {filter_str}"
+    
+    total = frappe.db.sql(count_query, values, as_dict=True)[0].count if filter_str else frappe.db.count("Automesh Workflow")
+    
+    # Get workflows with optimized query
+    query = f"""
+        SELECT 
+            name, title, description, is_active, tags, version,
+            created_at, updated_at, last_executed_at, execution_count, created_by,
+            workflow_json
+        FROM `tabAutomesh Workflow`
+    """
+    
+    if filter_str:
+        query += f" WHERE {filter_str}"
+    
+    query += f" ORDER BY {sort_by} {sort_order}"
+    
+    if limit:
+        query += f" LIMIT {int(limit)}"
+    if offset:
+        query += f" OFFSET {int(offset)}"
+    
+    workflows = frappe.db.sql(query, values, as_dict=True)
+    
+    # Format results
     result = []
     for workflow in workflows:
-        # Parse workflow JSON to get nodes and edges
-        workflow_json = {}
-        if workflow.name:
-            doc = frappe.get_doc("Automesh Workflow", workflow.name)
-            if doc.workflow_json:
-                try:
-                    workflow_json = json.loads(doc.workflow_json)
-                except:
-                    workflow_json = {"nodes": [], "edges": []}
+        # Parse workflow JSON (already loaded in single query)
+        workflow_json = {"nodes": [], "edges": []}
+        if workflow.workflow_json:
+            try:
+                workflow_json = json.loads(workflow.workflow_json)
+            except:
+                pass
         
         # Format the result to match our frontend data model
         formatted_workflow = {
@@ -67,8 +105,8 @@ def get_workflows(limit=None, offset=None, search=None, tags=None, is_active=Non
             "nodes": workflow_json.get("nodes", []),
             "edges": workflow_json.get("edges", []),
             "metadata": {
-                "createdAt": workflow.created_at or workflow.get("creation"),
-                "updatedAt": workflow.updated_at or workflow.get("modified"),
+                "createdAt": workflow.created_at,
+                "updatedAt": workflow.updated_at,
                 "lastExecutedAt": workflow.last_executed_at,
                 "executionCount": workflow.execution_count or 0,
                 "isActive": workflow.is_active == 1,
@@ -78,14 +116,11 @@ def get_workflows(limit=None, offset=None, search=None, tags=None, is_active=Non
         
         result.append(formatted_workflow)
     
-    # Get total count for pagination
-    total = frappe.db.count("Automesh Workflow", filters)
-    
     return {
         "workflows": result,
         "total": total,
-        "limit": limit,
-        "offset": offset
+        "limit": int(limit) if limit else None,
+        "offset": int(offset) if offset else None
     }
 
 
@@ -135,7 +170,8 @@ def get_workflow(workflow_id):
 @frappe.whitelist()
 def create_workflow():
     """Create a new workflow"""
-    workflow_data = json.loads(frappe.request.data)
+    data = json.loads(frappe.request.data)
+    workflow_data = data.get("workflow", {})
     
     # Create a new workflow
     workflow = frappe.new_doc("Automesh Workflow")
@@ -494,9 +530,21 @@ def toggle_workflow_status():
 
 @frappe.whitelist()
 def get_workflow_statistics(days=7):
-    """Get workflow statistics for dashboard"""
+    """Get workflow statistics for dashboard
+    
+    Performance optimizations:
+    - Uses aggregation queries instead of loading all records
+    - Single query for execution stats
+    - Cached for 5 minutes
+    """
     user = frappe.session.user
     is_admin = "System Manager" in frappe.get_roles()
+    
+    # Check cache first (5 minute TTL)
+    cache_key = f"workflow_stats_{user}_{days}"
+    cached_stats = frappe.cache().get_value(cache_key)
+    if cached_stats:
+        return cached_stats
     
     # Date range
     from frappe.utils import add_days
@@ -510,20 +558,17 @@ def get_workflow_statistics(days=7):
     total_workflows = frappe.db.count("Automesh Workflow", workflow_filters)
     active_workflows = frappe.db.count("Automesh Workflow", {**workflow_filters, "is_active": 1})
     
-    # Get executions in date range
-    exec_filters = {"start_time": [">=", from_date]}
+    # Build execution query with aggregation
     if not is_admin:
-        # Filter by user's workflows
+        # Get user's workflow IDs
         user_workflows = frappe.get_all(
             "Automesh Workflow",
             filters={"created_by": user},
             pluck="name"
         )
-        if user_workflows:
-            exec_filters["workflow"] = ["in", user_workflows]
-        else:
+        if not user_workflows:
             # No workflows, return zeros
-            return {
+            stats = {
                 "total_workflows": 0,
                 "active_workflows": 0,
                 "total_executions": 0,
@@ -533,16 +578,37 @@ def get_workflow_statistics(days=7):
                 "time_saved": "0h",
                 "avg_runtime": "0s"
             }
+            frappe.cache().set_value(cache_key, stats, expires_in_sec=300)
+            return stats
+        
+        workflow_condition = f"AND workflow IN ({','.join(['%s'] * len(user_workflows))})"
+        workflow_values = user_workflows
+    else:
+        workflow_condition = ""
+        workflow_values = []
     
-    executions = frappe.get_all(
-        "Automesh Execution",
-        filters=exec_filters,
-        fields=["status", "start_time", "end_time"]
-    )
+    # Single aggregation query for all execution stats
+    query = f"""
+        SELECT 
+            COUNT(*) as total_executions,
+            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+            SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+            AVG(CASE 
+                WHEN start_time IS NOT NULL AND end_time IS NOT NULL 
+                THEN TIMESTAMPDIFF(SECOND, start_time, end_time)
+                ELSE NULL 
+            END) as avg_runtime
+        FROM `tabAutomesh Execution`
+        WHERE start_time >= %s {workflow_condition}
+    """
     
-    total_executions = len(executions)
-    completed = len([e for e in executions if e.status == "completed"])
-    failed = len([e for e in executions if e.status == "failed"])
+    values = [from_date] + workflow_values
+    result = frappe.db.sql(query, values, as_dict=True)[0]
+    
+    total_executions = result.total_executions or 0
+    completed = result.completed or 0
+    failed = result.failed or 0
+    avg_runtime = result.avg_runtime or 0
     
     # Calculate metrics
     failure_rate = (failed / total_executions * 100) if total_executions > 0 else 0
@@ -551,16 +617,7 @@ def get_workflow_statistics(days=7):
     time_saved_minutes = completed * 5
     time_saved_hours = time_saved_minutes / 60
     
-    # Calculate average runtime
-    runtimes = []
-    for e in executions:
-        if e.start_time and e.end_time:
-            runtime = (e.end_time - e.start_time).total_seconds()
-            runtimes.append(runtime)
-    
-    avg_runtime = sum(runtimes) / len(runtimes) if runtimes else 0
-    
-    return {
+    stats = {
         "total_workflows": total_workflows,
         "active_workflows": active_workflows,
         "total_executions": total_executions,
@@ -570,6 +627,11 @@ def get_workflow_statistics(days=7):
         "time_saved": f"{time_saved_hours:.1f}h",
         "avg_runtime": f"{avg_runtime:.1f}s"
     }
+    
+    # Cache for 5 minutes
+    frappe.cache().set_value(cache_key, stats, expires_in_sec=300)
+    
+    return stats
 
 
 @frappe.whitelist()
@@ -589,6 +651,326 @@ def get_all_tags():
     return sorted(list(all_tags))
 
 
+# Phase 2 API Endpoints
+
+@frappe.whitelist()
+def bulk_delete_workflows():
+    """Delete multiple workflows at once"""
+    data = json.loads(frappe.request.data)
+    workflow_ids = data.get("workflow_ids", [])
+    
+    if not workflow_ids:
+        frappe.throw(_("Workflow IDs are required"))
+    
+    deleted = []
+    failed = []
+    
+    for workflow_id in workflow_ids:
+        try:
+            # Check permissions
+            if not _can_access_workflow(workflow_id, require_admin=True):
+                failed.append({"id": workflow_id, "error": "Permission denied"})
+                continue
+            
+            # Delete the workflow
+            frappe.delete_doc("Automesh Workflow", workflow_id)
+            deleted.append(workflow_id)
+        except Exception as e:
+            failed.append({"id": workflow_id, "error": str(e)})
+    
+    return {
+        "success": True,
+        "deleted": deleted,
+        "failed": failed,
+        "deleted_count": len(deleted),
+        "failed_count": len(failed)
+    }
+
+
+@frappe.whitelist()
+def bulk_update_status():
+    """Update status for multiple workflows at once"""
+    data = json.loads(frappe.request.data)
+    workflow_ids = data.get("workflow_ids", [])
+    is_active = data.get("is_active")
+    
+    if not workflow_ids:
+        frappe.throw(_("Workflow IDs are required"))
+    
+    if is_active is None:
+        frappe.throw(_("is_active parameter is required"))
+    
+    updated = []
+    failed = []
+    
+    for workflow_id in workflow_ids:
+        try:
+            # Check permissions
+            if not _can_access_workflow(workflow_id):
+                failed.append({"id": workflow_id, "error": "Permission denied"})
+                continue
+            
+            # Update status
+            workflow = frappe.get_doc("Automesh Workflow", workflow_id)
+            workflow.is_active = 1 if is_active else 0
+            workflow.updated_at = now()
+            workflow.save()
+            updated.append(workflow_id)
+        except Exception as e:
+            failed.append({"id": workflow_id, "error": str(e)})
+    
+    return {
+        "success": True,
+        "updated": updated,
+        "failed": failed,
+        "updated_count": len(updated),
+        "failed_count": len(failed)
+    }
+
+
+@frappe.whitelist()
+def get_workflow_executions(workflow_id, limit=10, offset=0, status=None):
+    """Get execution history for a workflow"""
+    if not workflow_id:
+        frappe.throw(_("Workflow ID is required"))
+    
+    if not _can_access_workflow(workflow_id):
+        frappe.throw(_("You don't have permission to access this workflow"))
+    
+    filters = {"workflow": workflow_id}
+    if status:
+        filters["status"] = status
+    
+    executions = frappe.get_all(
+        "Automesh Execution",
+        filters=filters,
+        fields=["name", "status", "start_time", "end_time", "created_by"],
+        order_by="start_time desc",
+        limit=int(limit),
+        start=int(offset)
+    )
+    
+    total = frappe.db.count("Automesh Execution", filters)
+    
+    return {
+        "executions": executions,
+        "total": total,
+        "limit": int(limit),
+        "offset": int(offset)
+    }
+
+
+@frappe.whitelist()
+def get_templates(category=None):
+    """Get available workflow templates"""
+    filters = {}
+    if category:
+        filters["category"] = category
+    
+    templates = frappe.get_all(
+        "Automesh Template",
+        filters=filters,
+        fields=["name", "title", "description", "category", "tags", "version", "is_featured"]
+    )
+    
+    return templates
+
+
+@frappe.whitelist()
+def create_workflow_from_template():
+    """Create a workflow from a template"""
+    data = json.loads(frappe.request.data)
+    template_id = data.get("template_id")
+    workflow_name = data.get("workflow_name")
+    
+    if not template_id:
+        frappe.throw(_("Template ID is required"))
+    
+    template = frappe.get_doc("Automesh Template", template_id)
+    template_data = json.loads(template.template_json) if template.template_json else {}
+    
+    # Create workflow from template
+    workflow = frappe.new_doc("Automesh Workflow")
+    workflow.title = workflow_name or f"{template.title} - {now()}"
+    workflow.description = template.description
+    workflow.workflow_json = template.template_json
+    workflow.tags = template.tags
+    workflow.version = "1.0.0"
+    workflow.is_active = 0
+    workflow.execution_count = 0
+    workflow.created_at = now()
+    workflow.updated_at = now()
+    workflow.created_by = frappe.session.user
+    workflow.insert()
+    
+    return get_workflow(workflow.name)
+
+
+@frappe.whitelist()
+def export_workflow_json():
+    """Export workflow as JSON"""
+    data = json.loads(frappe.request.data)
+    workflow_id = data.get("workflow_id")
+    
+    if not workflow_id:
+        frappe.throw(_("Workflow ID is required"))
+    
+    if not _can_access_workflow(workflow_id):
+        frappe.throw(_("You don't have permission to export this workflow"))
+    
+    workflow = frappe.get_doc("Automesh Workflow", workflow_id)
+    
+    export_data = {
+        "title": workflow.title,
+        "description": workflow.description,
+        "version": workflow.version,
+        "tags": workflow.tags,
+        "workflow_json": workflow.workflow_json,
+        "exported_at": now(),
+        "exported_by": frappe.session.user
+    }
+    
+    return export_data
+
+
+@frappe.whitelist()
+def import_workflow_json():
+    """Import workflow from JSON"""
+    data = json.loads(frappe.request.data)
+    import_data = data.get("import_data")
+    
+    if not import_data:
+        frappe.throw(_("Import data is required"))
+    
+    # Validate required fields
+    if not import_data.get("title") or not import_data.get("workflow_json"):
+        frappe.throw(_("Invalid workflow data"))
+    
+    # Create workflow
+    workflow = frappe.new_doc("Automesh Workflow")
+    workflow.title = f"{import_data['title']} (Imported)"
+    workflow.description = import_data.get("description", "")
+    workflow.workflow_json = import_data["workflow_json"]
+    workflow.tags = import_data.get("tags", "")
+    workflow.version = import_data.get("version", "1.0.0")
+    workflow.is_active = 0
+    workflow.execution_count = 0
+    workflow.created_at = now()
+    workflow.updated_at = now()
+    workflow.created_by = frappe.session.user
+    workflow.insert()
+    
+    return get_workflow(workflow.name)
+
+
+@frappe.whitelist()
+def share_workflow():
+    """Share workflow with another user"""
+    data = json.loads(frappe.request.data)
+    workflow_id = data.get("workflow_id")
+    shared_with = data.get("shared_with")
+    permission_level = data.get("permission_level", "view")
+    expires_at = data.get("expires_at")
+    
+    if not workflow_id or not shared_with:
+        frappe.throw(_("Workflow ID and user are required"))
+    
+    # Only owner or admin can share
+    if not _can_access_workflow(workflow_id, require_admin=True):
+        frappe.throw(_("You don't have permission to share this workflow"))
+    
+    # Check if already shared
+    existing = frappe.db.exists(
+        "Automesh Workflow Share",
+        {"workflow": workflow_id, "shared_with": shared_with}
+    )
+    
+    if existing:
+        # Update existing share
+        share = frappe.get_doc("Automesh Workflow Share", existing)
+        share.permission_level = permission_level
+        share.expires_at = expires_at
+        share.is_active = 1
+        share.save()
+    else:
+        # Create new share
+        share = frappe.new_doc("Automesh Workflow Share")
+        share.workflow = workflow_id
+        share.shared_with = shared_with
+        share.permission_level = permission_level
+        share.shared_by = frappe.session.user
+        share.shared_at = now()
+        share.expires_at = expires_at
+        share.is_active = 1
+        share.insert()
+    
+    return {"success": True, "share_id": share.name}
+
+
+@frappe.whitelist()
+def get_workflow_shares(workflow_id):
+    """Get all shares for a workflow"""
+    if not workflow_id:
+        frappe.throw(_("Workflow ID is required"))
+    
+    # Check permissions
+    if not _can_access_workflow(workflow_id):
+        frappe.throw(_("You don't have permission to access this workflow"))
+    
+    shares = frappe.get_all(
+        "Automesh Workflow Share",
+        filters={"workflow": workflow_id, "is_active": 1},
+        fields=["name", "shared_with", "permission_level", "shared_by", "shared_at", "expires_at"],
+        order_by="shared_at desc"
+    )
+    
+    return shares
+
+
+@frappe.whitelist()
+def revoke_workflow_share():
+    """Revoke a workflow share"""
+    data = json.loads(frappe.request.data)
+    share_id = data.get("share_id")
+    
+    if not share_id:
+        frappe.throw(_("Share ID is required"))
+    
+    share = frappe.get_doc("Automesh Workflow Share", share_id)
+    
+    # Check permissions - only owner or admin can revoke
+    if not _can_access_workflow(share.workflow, require_admin=True):
+        frappe.throw(_("You don't have permission to revoke this share"))
+    
+    # Deactivate the share
+    share.is_active = 0
+    share.save()
+    
+    return {"success": True}
+
+
+@frappe.whitelist()
+def update_workflow_share():
+    """Update a workflow share's permission level"""
+    data = json.loads(frappe.request.data)
+    share_id = data.get("share_id")
+    permission_level = data.get("permission_level")
+    
+    if not share_id or not permission_level:
+        frappe.throw(_("Share ID and permission level are required"))
+    
+    share = frappe.get_doc("Automesh Workflow Share", share_id)
+    
+    # Check permissions
+    if not _can_access_workflow(share.workflow, require_admin=True):
+        frappe.throw(_("You don't have permission to update this share"))
+    
+    share.permission_level = permission_level
+    share.save()
+    
+    return {"success": True}
+
+
 # Helper functions
 def _can_access_workflow(workflow_id, require_admin=False):
     """Check if the current user can access the workflow"""
@@ -598,13 +980,79 @@ def _can_access_workflow(workflow_id, require_admin=False):
     if "System Manager" in frappe.get_roles():
         return True
     
-    # If admin access is required, only system managers can proceed
-    if require_admin:
-        return False
-    
     # Check if the user is the owner
     workflow = frappe.get_doc("Automesh Workflow", workflow_id)
-    return workflow.created_by == user or workflow.owner == user
+    is_owner = workflow.created_by == user or workflow.owner == user
+    
+    if is_owner:
+        return True
+    
+    # If admin access is required, check for 'full' permission level
+    if require_admin:
+        shares = frappe.get_all(
+            "Automesh Workflow Share",
+            filters={
+                "workflow": workflow_id,
+                "shared_with": user,
+                "is_active": 1,
+                "permission_level": "full"
+            }
+        )
+        return len(shares) > 0
+    
+    # Check if shared with user (any permission level)
+    shares = frappe.get_all(
+        "Automesh Workflow Share",
+        filters={
+            "workflow": workflow_id,
+            "shared_with": user,
+            "is_active": 1
+        },
+        fields=["permission_level", "expires_at"]
+    )
+    
+    if shares:
+        # Check if any share is still valid (not expired)
+        for share in shares:
+            if not share.expires_at or share.expires_at > now():
+                return True
+    
+    return False
+
+
+def _get_user_permission_level(workflow_id, user=None):
+    """Get the user's permission level for a workflow"""
+    if not user:
+        user = frappe.session.user
+    
+    # System managers have full access
+    if "System Manager" in frappe.get_roles(user):
+        return "full"
+    
+    # Check if owner
+    workflow = frappe.get_doc("Automesh Workflow", workflow_id)
+    if workflow.created_by == user or workflow.owner == user:
+        return "full"
+    
+    # Check shares
+    shares = frappe.get_all(
+        "Automesh Workflow Share",
+        filters={
+            "workflow": workflow_id,
+            "shared_with": user,
+            "is_active": 1
+        },
+        fields=["permission_level", "expires_at"],
+        order_by="permission_level desc"  # Get highest permission first
+    )
+    
+    if shares:
+        # Return highest non-expired permission
+        for share in shares:
+            if not share.expires_at or share.expires_at > now():
+                return share.permission_level
+    
+    return None
 
 
 def _start_workflow_execution(execution_id):

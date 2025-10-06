@@ -32,12 +32,31 @@ export const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }
 
 // Import the Index component directly instead of using the Route export
 import { Index as HomePage } from './routes/index'
+import { Navigate } from '@tanstack/react-router'
 
-// Home route
+// Home route - redirects to /workflow
 export const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
+  component: () => <Navigate to="/workflow" />,
+})
+
+// Original home page (kept for reference)
+export const homeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/home',
   component: HomePage,
+})
+
+// App/Desk route - redirects to Frappe desk
+export const appRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/app',
+  component: () => {
+    // Redirect to Frappe desk
+    window.location.href = '/app'
+    return null
+  },
 })
 
 // About route (existing)
@@ -84,6 +103,8 @@ export const workflowDetailRoute = createRoute({
 // Export the route tree
 export const routeTree = rootRoute.addChildren([
   indexRoute,
+  homeRoute,
+  appRoute,
   aboutRoute,
   workflowRoute.addChildren([
     workflowIndexRoute,

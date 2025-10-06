@@ -98,11 +98,12 @@ def get_workflow(workflow_id):
 @frappe.whitelist()
 def create_workflow():
     """Create a new workflow"""
-    workflow_data = json.loads(frappe.request.data)
+    data = json.loads(frappe.request.data)
+    workflow_data = data.get("workflow", {})
     
     # Create a new workflow
     workflow = frappe.new_doc("Automesh Workflow")
-    workflow.title = workflow_data.get("title", "New Workflow")
+    workflow.title = workflow_data.get("name", workflow_data.get("title", "New Workflow"))
     workflow.description = workflow_data.get("description", "")
     workflow.version = workflow_data.get("version", "1.0.0")
     workflow.is_active = workflow_data.get("isActive", 0)
